@@ -1,0 +1,164 @@
+#Loading File
+import pandas as pd
+startups = pd.read_csv('C:/Users/17pol/Downloads/50_Startups.csv')
+
+startups.head()      #check top 5 rows of data
+startups.info()      #check info and shape for dtypes and non-null values
+startups.shape
+
+#renaming columns
+startups = startups.rename({ 'R&D Spend': 'RD'}, axis = 1)
+startups = startups.rename({ 'Administration': 'Admin'}, axis = 1)
+startups = startups.rename({ 'Marketing Spend': 'Marketing'}, axis = 1)
+
+#getting unique values
+startups['State'].unique()
+
+#creating dummy variable
+startups = pd.get_dummies(startups, columns = ['State'])
+startups.info()
+
+startups.duplicated()
+#No duplicates present
+
+#check correlations
+startups.corr()
+
+#check for collinearity
+startups.hist()
+import seaborn as sns
+sns.pairplot(startups)
+
+#renaming dummy variables for convenience
+startups = startups.rename({ 'State_California': 'California'}, axis = 1)
+startups = startups.rename({ 'State_Florida': 'Florida'}, axis = 1)
+startups = startups.rename({ 'State_New York': 'NewYork'}, axis = 1)
+startups.info()
+
+#R&D and marketing show positive linear relationship
+import statsmodels.formula.api as smf
+ml1 = smf.ols('Profit~ RD+Admin+Marketing+California+Florida+NewYork', data = startups).fit()
+print(ml1.pvalues)
+ml1.rsquared, ml1.rsquared_adj
+
+#rsquared and adjusted are not equal thus working on anomality
+#checking for each variable of RD and marketing
+ml2 = smf.ols('Profit~RD', data = startups).fit()
+print(ml2.pvalues, ml2.rsquared, ml2.rsquared_adj)
+ml3 = smf.ols('Profit~Marketing', data = startups).fit()
+print(ml3.pvalues, ml3.rsquared, ml3.rsquared_adj)
+ml4 = smf.ols('Profit~RD+Marketing', data = startups).fit()
+print(ml4.pvalues, ml4.rsquared, ml4.rsquared_adj)
+
+#Looking up the rsquared values we keep RD as out variable and remove Marketing
+
+data = startups.copy()
+startups_clean = startups.drop('Marketing', axis = 1)     #dropping off unrequired columns
+startups_clean.hist()
+
+#rescaling RD, Admin andProfit variables, to match the states value range and also normalize the data
+from sklearn.preprocessing import StandardScaler
+Data = startups_clean.values
+scaler = StandardScaler().fit(Data)
+Rescaled_startups = scaler.transform(Data)
+Rescaled_startups
+startups_final = pd.DataFrame(Rescaled_startups)
+
+#Building a model
+model = smf.ols('Profit ~ RD + Admin + Florida + California + NewYork', data = startups_final).fit()
+model.pvalues
+model.rsquared, model.rsquared_adj
+
+
+startups_final.info()
+startups_final.columns = [['RD','Admin','Profit','California','Florida','NewYork']]       #naming the columns
+
+#Building a model
+model = smf.ols('Profit ~ RD + Admin + Florida + California + NewYork', data = startups_final).fit()
+print(model.pvalues)
+model.rsquared, model.rsquared_adj
+
+#Pretty good model with rsquared and rsquared adj matching to two decimal places and all pvalues below 0.05. Furthermore
+#working on influential points and plots
+
+startups_final['Predicted'] = model.fittedvalues
+startups_final['Errors'] = model.resid
+startups_final.head()
+
+#Residual analysis
+#normality of fitted values
+
+import statsmodels.api as sm
+model_qqlot = sm.qqplot(model.resid, line = 'q')
+
+import matplotlib.pyplot as plt
+plt.title('Normality of model residuals')
+#most of the points lie on the plot accept one being very far
+
+
+#Residuals vs regressors
+fig = plt.figure(figsize = (15,8))
+fig = sm.graphics.plot_regress_exog(model, 'RD', fig = fig)
+plt.show()
+
+#All fine in residuals vs RD
+
+fig = plt.figure(figsize = (15,8))
+fig = sm.graphics.plot_regress_exog(model, 'Admin', fig = fig)
+plt.show()
+
+#All fine in residuals vs RD
+
+#model deletion diagnostics
+model_influence = model.get_influence()
+(c,_) = model_influence.cooks_distance
+
+
+import numpy as np
+#plotting influencers using stem plot
+fit = plt.subplots(figsize = (20,7))
+plt.stem (np.arange(len(startups_final)), np.round(c,3))
+plt.xlabel('Rowindex')
+plt.ylabel('CooksDistance')
+plt.show()
+
+#cooks distance
+np.argmax(c), np.max(c)
+
+#influence plots
+from statsmodels.graphics.regressionplots import influence_plot
+influence_plot(model)
+plt.show()
+
+k = startups_final.shape[1]
+n = startups_final.shape[0]
+leverage_cutoff = 3*((k+1)/n)
+leverage_cutoff
+
+#we consider here just the points 14, 49,48
+#from both cooks distance and influence plot
+#we drop the values
+startups_final = startups_final.drop(startups_final.index[[14,49,48]], axis = 0).reset_index()
+
+
+#buidling moddel again
+model_final = smf.ols('Profit~ RD+Admin+Florida+California+NewYork', data = startups_final).fit()
+print(model_final.pvalues)
+model_final.rsquared, model.rsquared_adj
+
+#We check for anomality by inserting marketing again without point 14,48,49
+startups_clean.head()
+startups.head()
+startups_final.head()
+startups_final.info()
+
+model = smf.ols('Profit ~ RD + Admin + Florida + California + NewYork', data = startups_final).fit()
+print(model.pvalues)
+print(model.rsquared, model.rsquared_adj)
+model_influence = model.get_influence()
+(c,_) = model_influence.cooks_distance
+
+#Hence we get excellent model with 96% coefficient of determination
+
+
+
