@@ -1,0 +1,284 @@
+#Loading data
+import pandas as pd
+toyota = pd.read_csv('C:/Users/17pol/Downloads/ToyotaCorolla.csv')
+
+#creating dataframe of just the required columns
+TT_req = pd.DataFrame(toyota[["Price","Age_08_04","KM","HP","cc","Doors","Gears","Quarterly_Tax","Weight"]]) 
+TT_req.info()
+TT_req.shape
+#shape = nonnull cells in inf. Therefore no null or missing values
+
+import numpy as np
+np.where(toyota == ' ') #No null ofr blank spaces present
+
+#checking for unique values in each column
+TT_req.head()
+TT_req['Doors'].unique()
+TT_req['Gears'].unique()
+TT_req['Weight'].unique()
+TT_req['Quarterly_Tax'].unique()
+TT_req['cc'].unique()
+TT_req['KM'].unique()
+TT_req['HP'].unique()
+TT_req['Age_08_04'].unique()
+
+len(TT_req['Gears'].unique())        #no. of uniques values
+len(TT_req['Doors'].unique())
+
+TT_req.drop_duplicates()   #drop duplicates
+
+#Because the extent of variety in car features ranges from just 4 different values to 1263 different values 
+#in different categories, we will consider the variables separately. As all  variables are int type they do have an ordinality 
+#associate with their records,which may affect the impact of those values on the dependant variable. We can check impact of 
+#each parameter with its associated p-value  
+
+#checking for collinearity and correlation among variables
+#Check for correlation with just the dependant variable
+TT_req.corr().iloc[:,0]
+
+#Gears,cc and doors have got very low correlation with the dependant variable price, thus we consider assessing its p-value to 
+#check their impact
+
+#check for collinearity using pair plots
+import seaborn as sns
+sns.pairplot(TT_req)
+TT_req.corr()
+#We see no collinearity in the plots
+
+#Renaming column
+TT_req = TT_req.rename({'Age_08_04':'Age'}, axis = 1)
+
+print(TT_req.head())
+TT_req.shape
+
+#Outlier Detection
+TT_req.hist()
+
+import matplotlib.pyplot as plt
+plt.boxplot(TT_req['Price'])
+
+TT_req['Price'].quantile(1)              #checking the cutoffs suitable for our data
+TT_req['Price'].quantile(0.995)
+
+Copy = TT_req.copy()
+
+#Outliers
+TT2 = pd.DataFrame()
+type(TT2)
+TT2 = TT_req.where(TT_req['Price']>26000)
+TT2.dropna()
+TT2.info()
+TT_req.info()
+
+#Deleting outliers from data
+TT_new = pd.concat([TT_req,TT2,TT2]).drop_duplicates(keep=False)
+
+#pd.concat adds the two DataFrames together by appending one right after the other. if there is any overlap, 
+#it will be captured by the drop_duplicates method. However, drop_duplicates by default leaves the first observation 
+#and removes every other observation. In this case, we want every duplicate removed. Hence, the keep=False parameter which 
+#does exactly that.
+
+#A special note to the repeated df2. With only one TT2 any row in TT2 not in TT_req won't be considered a duplicate and will 
+#remain. This solution with only one df2 only works when df2 is a subset of df1. However, if we concat df2 twice, it is 
+#guaranteed to be a duplicate and will subsequently be removed.
+
+
+#EDA on new
+TT_new.info()
+TT_new.dropna()
+
+# Gears have the least impact on the price with correlation coefficient of 0.06
+# Doors and cc have low correlation compared to other variables, 0.18 and 0.12
+# we shall assess to keep or drop the 3 variables
+
+#checking for impact of the three variables mentioned before, to check their impact, doors,cc,gears
+
+import statsmodels.formula.api as smf
+ml1 = smf.ols('Price~ Gears', data = TT_new).fit()
+print(ml1.pvalues)
+ml1.params                                          #because pvalues <0.05, the variable is significant
+                                          # the parametric coefficient is 1261.6, thus very good impact on price
+
+
+ml2 = smf.ols('Price~ cc', data = TT_new).fit()
+print(ml2.pvalues)
+#because pvalues <0.05, the variable is significant
+# the parametric coefficient is 0.9, thus very low impact on price
+ml2.params
+#thus we decide to drop the parameter cc
+
+ml3 = smf.ols('Price~ Doors', data = TT_new).fit()
+print(ml3.pvalues)
+#because pvalues <0.05, the variable is significant
+# the parametric coefficient is 640, thus good impact on price
+ml3.params
+
+
+#dropping the cc column from the data TT_new
+TT_clean = TT_new.drop(columns = ['cc'])
+TT_clean.columns
+
+
+# creating the MLR model
+model1 = smf.ols('Price~ Age+KM+HP+Doors+Gears+Quarterly_Tax+Weight', data = TT_clean).fit()
+                                                     #Beta coefficients
+model1.params
+
+#KM had very good correlation with price, but may be it's affecting as it has got the same correlation with 
+#other independant variable named Age
+#We shall assess by dropping and keeping the KM parameter, its effect on the model
+
+
+#pvalues
+model1.pvalues
+#all attributes significant with pvalues<0.05
+
+
+#r-squared
+model1.rsquared,'\n', model1.rsquared_adj
+
+#pretty good mosel as equal rsquared and adjusted r squared values with no anomality in data
+
+#calculating VIF
+#"Age_08_04","KM","HP","Doors","Gears","Quarterly_Tax","Weight"
+r2_age = smf.ols('Age~KM+HP+Doors+Gears+Quarterly_Tax+Weight', data = TT_clean).fit().rsquared
+r2_KM = smf.ols('KM~Age+HP+Doors+Gears+Quarterly_Tax+Weight', data = TT_clean).fit().rsquared
+r2_HP = smf.ols('HP~KM+Age+Doors+Gears+Quarterly_Tax+Weight', data = TT_clean).fit().rsquared
+r2_Dr = smf.ols('Doors~KM+HP+Age+Gears+Quarterly_Tax+Weight', data = TT_clean).fit().rsquared
+r2_Gr = smf.ols('Gears~KM+HP+Doors+Age+Quarterly_Tax+Weight', data = TT_clean).fit().rsquared
+r2_QT = smf.ols('Quarterly_Tax~KM+HP+Doors+Gears+Age+Weight', data = TT_clean).fit().rsquared
+r2_Wt = smf.ols('Weight~KM+HP+Doors+Gears+Quarterly_Tax+Age', data = TT_clean).fit().rsquared
+
+
+vif_age = 1/(1-r2_age)
+vif_KM = 1/(1-r2_KM)
+vif_HP = 1/(1-r2_HP)
+vif_Dr = 1/(1-r2_Dr)
+vif_Gr = 1/(1-r2_Gr)
+vif_QT = 1/(1-r2_QT)
+vif_Wt = 1/(1-r2_Wt)
+
+print(vif_age,'\n',vif_KM ,'\n',vif_HP,'\n',vif_Dr,'\n',vif_Gr ,'\n',vif_QT ,'\n',vif_Wt )
+# VIF of all variables is below 10 and thus acceptable 
+#The VIF of two variables are seemingly equal, age and KM, thus we can assess dropping one 
+
+ml4 = smf.ols('Price~Age+KM+HP+Doors+Gears+Quarterly_Tax+Weight', data = TT_clean).fit()
+print(ml4.pvalues)
+print(ml4.rsquared, ml4.rsquared_adj )
+#dropping KM
+ml5 = smf.ols('Price~Age+HP+Doors+Gears+Quarterly_Tax+Weight', data = TT_clean).fit()
+print(ml5.pvalues)
+print(ml5.rsquared, ml5.rsquared_adj )
+#Dropping age
+ml6 = smf.ols('Price~KM+HP+Doors+Gears+Quarterly_Tax+Weight', data = TT_clean).fit()
+print(ml6.pvalues)
+print(ml6.rsquared, ml6.rsquared_adj )
+
+#Keeping both the factors or variabls age and KM in the model gives a better Rsquared or coefficient of determination of 
+#0.85. Thus we conclude on retaining both the parameters
+
+
+#appending the model predicted values and the errors to the original data
+TT_clean['Predicted_values'] = model1.fittedvalues
+TT_clean['Errors'] = model1.resid
+TT_clean['pred_log'] = np.log(TT_clean['Predicted_values'])
+TT_clean['act_log'] = np.log(TT_clean['Price'])
+TT_clean['error_log'] = TT_clean['act_log'].subtract(TT_clean['pred_log'])
+
+
+#Residual Analysis
+
+#Normality of errors
+
+import statsmodels.api as sm
+qqplot = sm.qqplot(model1.resid, line = 'q')
+qqplot2 = sm.qqplot(TT_clean['error_log'], line = 'q')
+
+#we get better normality of errors with this log transformation
+import matplotlib.pyplot as plt
+plt.title("Normality plot of residuals")
+plt.show()
+
+
+import numpy as np
+TT_clean['Log_predicted'] = np.log(TT_clean['Predicted_values'])
+list(np.where(TT_clean['error_log']>0.4))
+list(np.where(TT_clean['error_log']< -0.45))
+
+#Standardised values function
+def Get_standardised_vals (vals):
+    return (vals - vals.mean())/vals.std()
+
+stndrz_fitted = Get_standardised_vals(TT_clean['Predicted_values'])
+stndrz_err = Get_standardised_vals(TT_clean['Errors'])
+
+import matplotlib.pyplot as plt
+%matplotlib inline
+plt.scatter(stndrz_fitted, stndrz_err)
+plt.title('Residual Plot')
+plt.xlabel('Standardized fitted values')
+plt.ylabel('Standardized error values')
+plt.show()
+#we see homoscedacity
+
+fig = plt.figure (figsize =(15,8))
+fig = sm.graphics.plot_regress_exog(model1, 'KM', fig = fig)
+plt.show()
+#no pattern between Residuals and KM
+
+fig = plt.figure(figsize = (15,8))
+fig = sm.graphics.plot_regress_exog(model1, 'Age', fig = fig)
+plt.show()
+#no pattern between Residuals and Age either
+
+#Model Deletion Diagnostics
+model_influence = model1.get_influence()
+(c , _) = model_influence.cooks_distance
+
+#plotting influencers using stem plot
+fit = plt.subplots(figsize = (20,7))
+plt.stem(np.arange(len(TT_clean)), np.round(c,3))
+plt.xlabel('RowIndex')
+plt.ylabel('Cooks distance')
+plt.show()
+
+#index and value of influencer where c is more than .5
+(np.argmax(c),np.max(c))
+
+#influence plot
+from statsmodels.graphics.regressionplots import influence_plot
+influence_plot(model1)
+
+k = TT_clean.shape[1]
+n = TT_clean.shape[0]
+leverage_cutoff = 3*((k + 1)/n)
+leverage_cutoff
+
+#Because many points between 0.03 and 0.04, we consider cutoff as 0.04 
+#thus the points 956, 991, 221, 960
+
+#array([186, 187, 216, 388, 397, 596, 955]
+#array([ 518, 1049, 1053, 1074]
+
+#from cooks plot 216
+
+TT_clean[TT_clean.index.isin([186, 187, 216, 388, 397, 596, 955,956, 991, 221, 960, 518, 1049, 1053, 1074 ])]
+
+TT_clean.head()
+#from above comparisons, we find the points [960, 221, 216] influencers
+#thus, dropping the same
+TT_clean_new = TT_clean.drop(TT_clean.index[[960,221,216]], axis = 0).reset_index()
+
+
+#buiding model again
+model_final = smf.ols('Price~Age+KM+HP+Doors+Gears+Quarterly_Tax+Weight', data = TT_clean_new).fit()
+print(model_final.rsquared, model_final.aic)
+
+#model has good r-squared 
+#Best model output
+#Thank you
+plt.show()
+
+
+
+
